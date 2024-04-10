@@ -1,5 +1,5 @@
 pub mod xml_parser;
-pub mod html_parser;
+pub mod messenger_plus_parser;
 pub mod error;
 
 #[derive(Default, PartialEq, Debug)]
@@ -30,6 +30,6 @@ pub struct Text {
 #[derive(Default, PartialEq, Debug)]
 pub enum FileType {
     #[default]
-    HTML,
     XML,
+    MessengerPlus,
 }

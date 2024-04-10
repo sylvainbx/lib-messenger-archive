@@ -2,23 +2,23 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Debug)]
-pub struct MsnMessengerError {
+pub struct MessengerError {
     details: String
 }
 
-impl MsnMessengerError {
-    pub fn new(msg: &str) -> MsnMessengerError {
-        MsnMessengerError { details: msg.to_string() }
+impl MessengerError {
+    pub fn new(msg: &str) -> MessengerError {
+        MessengerError { details: msg.to_string() }
     }
 }
 
-impl fmt::Display for MsnMessengerError {
+impl fmt::Display for MessengerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,"{}",self.details)
     }
 }
 
-impl Error for MsnMessengerError {
+impl Error for MessengerError {
     fn description(&self) -> &str {
         &self.details
     }
