@@ -1,6 +1,7 @@
 pub mod xml_parser;
 pub mod messenger_plus_parser;
 pub mod error;
+pub mod common;
 
 #[derive(Default, PartialEq, Debug)]
 pub struct MessagesList {
@@ -25,7 +26,8 @@ pub struct Message {
 #[derive(PartialEq, Debug)]
 pub enum Data {
     Text(Text),
-    Image(Image)
+    Image(Image),
+    System(String),
 }
 
 #[derive(Default, PartialEq, Debug)]

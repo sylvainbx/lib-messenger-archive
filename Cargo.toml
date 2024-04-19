@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 xml-rs = "0.8.20"
-chrono = "0.4.37"
+chrono = "0.4.38"
+html-escape = "0.2.13"
