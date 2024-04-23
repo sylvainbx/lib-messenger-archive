@@ -118,7 +118,6 @@ impl Iterator for XmlParser {
                 _ => {}
             }
         }
-        None
     }
 }
 
