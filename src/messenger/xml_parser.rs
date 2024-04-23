@@ -1,4 +1,4 @@
-use crate::messenger::{common, Data, Message, MessagesList, Text};
+use crate::messenger::{common, Data, Message, ArchiveDetails, Text, MessengerArchive};
 use chrono::NaiveTime;
 use std::collections::HashMap;
 use std::fs::File;
@@ -10,7 +10,7 @@ use xml::EventReader;
 use xml::reader::XmlEvent;
 
 pub struct XmlParser {
-    list: MessagesList,
+    details: ArchiveDetails,
     reader: EventReader<BufReader<File>>,
     parents: Vec<String>,
 }
@@ -18,22 +18,18 @@ pub struct XmlParser {
 impl XmlParser {
     pub fn new(path: &str) -> Self {
         XmlParser {
-            list: MessagesList {
+            details: ArchiveDetails {
                 recipient_id: Path::new(path)
                     .file_stem()
                     .unwrap_or_default()
                     .to_str()
                     .unwrap_or_default()
                     .to_string(),
-                ..MessagesList::default()
+                ..ArchiveDetails::default()
             },
             reader: common::get_parser(path).expect("Invalid file provided"),
             parents: vec![],
         }
-    }
-
-    pub fn archive(&self) -> &MessagesList {
-        &self.list
     }
 
 
@@ -42,8 +38,8 @@ impl XmlParser {
 
         match name {
             "Log" => {
-                self.list.first_session_id = attributes.get("FirstSessionID").unwrap_or(&"0").to_string();
-                self.list.last_session_id = attributes.get("LastSessionID").unwrap_or(&"0").to_string();
+                self.details.first_session_id = attributes.get("FirstSessionID").unwrap_or(&"0").to_string();
+                self.details.last_session_id = attributes.get("LastSessionID").unwrap_or(&"0").to_string();
             }
             "Message" => {
                 message.session_id = attributes.get("SessionID").unwrap_or(&"0").to_string();
@@ -121,6 +117,12 @@ impl Iterator for XmlParser {
     }
 }
 
+impl MessengerArchive for XmlParser {
+    fn details(&self) -> &ArchiveDetails {
+        &self.details
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,7 +132,7 @@ mod tests {
     fn parse_sample_file() {
         let path = "test/alice1234.xml";
         let mut parser = XmlParser::new(path);
-        let expected = MessagesList {
+        let details = ArchiveDetails {
             file_type: FileType::XML,
             first_session_id: "1".to_string(),
             last_session_id: "1".to_string(),
@@ -169,21 +171,21 @@ mod tests {
         assert_eq!(parser.next().as_ref(), Some(&messages[0]));
         assert_eq!(parser.next().as_ref(), Some(&messages[1]));
         assert_eq!(parser.next(), None);
-        assert_eq!(parser.archive(), &expected);
+        assert_eq!(parser.details(), &details);
     }
 
     #[test]
     fn parse_scrappy_file() {
         let path = "test/scrappy.xml";
         let mut parser = XmlParser::new(path);
-        let expected = MessagesList {
+        let expected = ArchiveDetails {
             file_type: FileType::XML,
             first_session_id: "0".to_string(),
             last_session_id: "0".to_string(),
             recipient_id: "scrappy".to_string(),
         };
         assert_eq!(parser.next(), None);
-        assert_eq!(parser.archive(), &expected);
+        assert_eq!(parser.details(), &expected);
         
     }
 }

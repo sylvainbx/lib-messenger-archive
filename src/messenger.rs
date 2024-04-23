@@ -3,12 +3,15 @@ pub mod error;
 pub mod messenger_plus_parser;
 pub mod xml_parser;
 
+pub trait MessengerArchive: Iterator {
+    fn details(&self) -> &ArchiveDetails;
+}
+
 #[derive(Default, PartialEq, Debug)]
-pub struct MessagesList {
+pub struct ArchiveDetails {
     file_type: FileType,
     first_session_id: String,
     last_session_id: String,
-    messages: Vec<Message>,
     recipient_id: String,
 }
 

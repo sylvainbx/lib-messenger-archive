@@ -1,5 +1,5 @@
 use crate::messenger::common::parse_attributes;
-use crate::messenger::{common, Data, FileType, Image, Message, MessagesList, Text};
+use crate::messenger::{common, Data, FileType, Image, Message, ArchiveDetails, Text, MessengerArchive};
 use chrono::{NaiveDateTime, NaiveTime, Timelike};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -10,7 +10,7 @@ use xml::reader::XmlEvent;
 
 
 pub struct MessengerPlusParser<'a> {
-    list: MessagesList,
+    details: ArchiveDetails,
     reader: EventReader<BufReader<File>>,
     parents: (String, Vec<OwnedAttribute>),
     session: MsgPlusSession,
@@ -32,7 +32,7 @@ impl<'a> MessengerPlusParser<'a> {
     pub fn new(path: &'a str) -> Self {
         let path_t = Path::new(path);
         MessengerPlusParser {
-            list: MessagesList {
+            details: ArchiveDetails {
                 recipient_id: path_t
                     .file_stem()
                     .unwrap_or_default()
@@ -40,7 +40,7 @@ impl<'a> MessengerPlusParser<'a> {
                     .unwrap_or_default()
                     .to_string(),
                 file_type: FileType::MessengerPlus,
-                ..MessagesList::default()
+                ..ArchiveDetails::default()
             },
             reader:  common::get_parser(path).expect("Invalid file provided"),
             parents: ("".to_string(), vec![]),
@@ -50,10 +50,6 @@ impl<'a> MessengerPlusParser<'a> {
                 .expect("The file must be somewhere in a directory"),
             first_message: true
         }
-    }
-
-    pub fn archive(&self) -> &MessagesList {
-        &self.list
     }
 
     fn parse_node(&mut self, name: &str, attributes: &Vec<OwnedAttribute>, message: &mut Message) {
@@ -68,8 +64,8 @@ impl<'a> MessengerPlusParser<'a> {
                     if let Some(id) = attributes.get("id") {
                         self.session.id = id.to_string();
                         self.session.date = NaiveDateTime::parse_from_str(id, "Session_%Y-%m-%dT%H-%M-%S").expect("Unable to parse the session datetime");
-                        if self.list.first_session_id.is_empty() {
-                            self.list.first_session_id = id.to_string();
+                        if self.details.first_session_id.is_empty() {
+                            self.details.first_session_id = id.to_string();
                         }
                     }
                 }
@@ -213,7 +209,7 @@ impl<'a> Iterator for MessengerPlusParser<'a>  {
                     }
                 }
                 Ok(XmlEvent::EndDocument) => {
-                    self.list.last_session_id = self.session.id.clone();
+                    self.details.last_session_id = self.session.id.clone();
                     return None;
                 }
                 Err(e) => panic!("Something went wrong: {}", e),
@@ -221,6 +217,10 @@ impl<'a> Iterator for MessengerPlusParser<'a>  {
             }
         }
     }
+}
+
+impl<'a> MessengerArchive for MessengerPlusParser<'a> {
+    fn details(&self) -> &ArchiveDetails { &self.details }
 }
 
 #[cfg(test)]
@@ -238,7 +238,7 @@ mod tests {
         let mut buffer = Vec::new();
         f.read_to_end(&mut buffer).unwrap();
 
-        let expected = MessagesList {
+        let details = ArchiveDetails {
             file_type: FileType::MessengerPlus,
             recipient_id: "alice@example.com".to_string(),
             first_session_id: "Session_2009-08-05T19-30-21".to_string(),
@@ -345,6 +345,6 @@ mod tests {
         assert_eq!(parser.next().as_ref(), Some(&messages[4]));
         assert_eq!(parser.next().as_ref(), Some(&messages[5]));
         assert_eq!(parser.next(), None);
-        assert_eq!(parser.archive(), &expected);
+        assert_eq!(parser.details(), &details);
     }
 }
