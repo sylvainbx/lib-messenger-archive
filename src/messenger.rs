@@ -9,20 +9,20 @@ pub trait MessengerArchive: Iterator {
 
 #[derive(Default, PartialEq, Debug)]
 pub struct ArchiveDetails {
-    file_type: FileType,
-    first_session_id: String,
-    last_session_id: String,
-    recipient_id: String,
+    pub file_type: FileType,
+    pub first_session_id: String,
+    pub last_session_id: String,
+    pub recipient_id: String,
 }
 
 #[derive(Default, PartialEq, Debug)]
 pub struct Message {
-    datetime: String,
-    timezone_offset: Option<i64>,
-    session_id: String,
-    sender_friendly_name: String,
-    receiver_friendly_name: String,
-    data: Vec<Data>,
+    pub datetime: String,
+    pub timezone_offset: Option<i64>,
+    pub session_id: String,
+    pub sender_friendly_name: String,
+    pub receiver_friendly_name: String,
+    pub data: Vec<Data>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -34,15 +34,15 @@ pub enum Data {
 
 #[derive(Default, PartialEq, Debug)]
 pub struct Text {
-    style: String,
-    content: String,
+    pub style: String,
+    pub content: String,
 }
 
 #[derive(Default, PartialEq, Debug)]
 pub struct Image {
-    src: String,
-    alt: String,
-    content: Vec<u8>,
+    pub src: String,
+    pub alt: String,
+    pub content: Vec<u8>,
 }
 
 #[derive(Default, PartialEq, Debug)]
