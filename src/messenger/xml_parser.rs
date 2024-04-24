@@ -1,6 +1,7 @@
 use crate::messenger::{common, Data, Message, ArchiveDetails, Text, MessengerArchive};
 use chrono::NaiveTime;
 use std::collections::HashMap;
+use std::error;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -13,11 +14,12 @@ pub struct XmlParser {
     details: ArchiveDetails,
     reader: EventReader<BufReader<File>>,
     parents: Vec<String>,
+    done: bool,
 }
 
 impl XmlParser {
-    pub fn new(path: &str) -> Self {
-        XmlParser {
+    pub fn new(path: &str) -> Result<Self, Box<dyn error::Error>> {
+        Ok(XmlParser {
             details: ArchiveDetails {
                 recipient_id: Path::new(path)
                     .file_stem()
@@ -27,9 +29,10 @@ impl XmlParser {
                     .to_string(),
                 ..ArchiveDetails::default()
             },
-            reader: common::get_parser(path).expect("Invalid file provided"),
+            reader: common::get_parser(path)?,
             parents: vec![],
-        }
+            done: false,
+        })
     }
 
 
@@ -80,7 +83,7 @@ impl XmlParser {
 }
 
 impl Iterator for XmlParser {
-    type Item = Message;
+    type Item = Result<Message, Box<dyn error::Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut message = Message::default();
@@ -104,13 +107,14 @@ impl Iterator for XmlParser {
                 Ok(XmlEvent::EndElement { name }) => {
                     self.parents.pop();
                     if name.local_name.eq("Message") {
-                        return Some(message);
+                        return Some(Ok(message));
                     }
                 }
                 Ok(XmlEvent::EndDocument) => {
+                    self.done = true;
                     return None;
                 }
-                Err(e) => panic!("Something went wrong: {}", e),
+                Err(e) => { return Some(Err(Box::new(e))) },
                 _ => {}
             }
         }
@@ -118,8 +122,12 @@ impl Iterator for XmlParser {
 }
 
 impl MessengerArchive for XmlParser {
-    fn details(&self) -> &ArchiveDetails {
-        &self.details
+    fn details(&self) -> Option<&ArchiveDetails> {
+        if self.done {
+            Some(&self.details)
+        } else {
+            None
+        }
     }
 }
 
@@ -131,7 +139,7 @@ mod tests {
     #[test]
     fn parse_sample_file() {
         let path = "test/alice1234.xml";
-        let mut parser = XmlParser::new(path);
+        let mut parser = XmlParser::new(path).unwrap();
         let details = ArchiveDetails {
             file_type: FileType::XML,
             first_session_id: "1".to_string(),
@@ -168,24 +176,25 @@ mod tests {
                 ],
             },
         ];
-        assert_eq!(parser.next().as_ref(), Some(&messages[0]));
-        assert_eq!(parser.next().as_ref(), Some(&messages[1]));
-        assert_eq!(parser.next(), None);
-        assert_eq!(parser.details(), &details);
+        assert_eq!(parser.details(), None);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[0]);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[1]);
+        assert!(parser.next().is_none());
+        assert_eq!(parser.details(), Some(&details));
     }
 
     #[test]
     fn parse_scrappy_file() {
         let path = "test/scrappy.xml";
-        let mut parser = XmlParser::new(path);
+        let mut parser = XmlParser::new(path).unwrap();
         let expected = ArchiveDetails {
             file_type: FileType::XML,
             first_session_id: "0".to_string(),
             last_session_id: "0".to_string(),
             recipient_id: "scrappy".to_string(),
         };
-        assert_eq!(parser.next(), None);
-        assert_eq!(parser.details(), &expected);
+        assert!(parser.next().is_none());
+        assert_eq!(parser.details(), Some(&expected));
         
     }
 }

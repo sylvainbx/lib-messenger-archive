@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::messenger::common::parse_attributes;
 use crate::messenger::{common, Data, FileType, Image, Message, ArchiveDetails, Text, MessengerArchive};
 use chrono::{NaiveDateTime, NaiveTime, Timelike};
@@ -29,9 +30,9 @@ struct MsgPlusSession {
 
 
 impl<'a> MessengerPlusParser<'a> {
-    pub fn new(path: &'a str) -> Self {
+    pub fn new(path: &'a str) -> Result<Self, Box<dyn Error>> {
         let path_t = Path::new(path);
-        MessengerPlusParser {
+        Ok(MessengerPlusParser {
             details: ArchiveDetails {
                 recipient_id: path_t
                     .file_stem()
@@ -42,17 +43,16 @@ impl<'a> MessengerPlusParser<'a> {
                 file_type: FileType::MessengerPlus,
                 ..ArchiveDetails::default()
             },
-            reader:  common::get_parser(path).expect("Invalid file provided"),
+            reader:  common::get_parser(path)?,
             parents: ("".to_string(), vec![]),
             session: MsgPlusSession::default(),
             directory: path_t
-                .parent()
-                .expect("The file must be somewhere in a directory"),
-            first_message: true
-        }
+                .parent().ok_or("The file must be somewhere in a directory")?,
+            first_message: true,
+        })
     }
 
-    fn parse_node(&mut self, name: &str, attributes: &Vec<OwnedAttribute>, message: &mut Message) {
+    fn parse_node(&mut self, name: &str, attributes: &Vec<OwnedAttribute>, message: &mut Message) -> Result<(), Box<dyn Error>> {
         let attributes = parse_attributes(attributes);
         match name {
             "div" => {
@@ -63,7 +63,7 @@ impl<'a> MessengerPlusParser<'a> {
                 {
                     if let Some(id) = attributes.get("id") {
                         self.session.id = id.to_string();
-                        self.session.date = NaiveDateTime::parse_from_str(id, "Session_%Y-%m-%dT%H-%M-%S").expect("Unable to parse the session datetime");
+                        self.session.date = NaiveDateTime::parse_from_str(id, "Session_%Y-%m-%dT%H-%M-%S")?;
                         if self.details.first_session_id.is_empty() {
                             self.details.first_session_id = id.to_string();
                         }
@@ -103,7 +103,7 @@ impl<'a> MessengerPlusParser<'a> {
                     if let Some(src) = attributes.get("src") {
                         img.src = src.trim().to_string();
                         let mut buffer = Vec::new();
-                        File::open(self.directory.join(src)).expect("Image does not exist").read_to_end(&mut buffer).expect("Unable to read the image");
+                        File::open(self.directory.join(src))?.read_to_end(&mut buffer)?;
                         img.content = buffer;
                     }
                     message.data.push(Data::Image(img));
@@ -111,9 +111,10 @@ impl<'a> MessengerPlusParser<'a> {
             }
             _ => {}
         }
+        Ok(())
     }
 
-    fn parse_text(&mut self, data: &str, message: &mut Message) {
+    fn parse_text(&mut self, data: &str, message: &mut Message) -> Result<(), Box<dyn Error>> {
         match self.parents.0.as_str() {
             ".html.body.div.ul.li" => {
                 let attributes = parse_attributes(&self.parents.1);
@@ -133,14 +134,14 @@ impl<'a> MessengerPlusParser<'a> {
                         NaiveTime::parse_from_str(
                             format!("{}:{}", data, self.session.date.second()).as_str(),
                             "(%H:%M):%S",
-                        ).expect("Unable to parse the session datetime"),
+                        )?,
                     );
                     message.datetime = datetime.format("%Y-%m-%dT%H:%M:%S").to_string();
                     self.first_message = false;
                 } else {
                     let datetime = NaiveDateTime::new(
                         self.session.date.date(),
-                        NaiveTime::parse_from_str(data, "(%H:%M)").expect("Unable to parse the session time"),
+                        NaiveTime::parse_from_str(data, "(%H:%M)")?,
                     );
                     message.datetime = datetime.format("%Y-%m-%dT%H:%M").to_string();
                 };
@@ -177,11 +178,12 @@ impl<'a> MessengerPlusParser<'a> {
             }
             _ => {}
         }
+        Ok(())
     }
 }
 
 impl<'a> Iterator for MessengerPlusParser<'a>  {
-    type Item = Message;
+    type Item = Result<Message, Box<dyn Error>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut message = Message::default();
@@ -191,12 +193,14 @@ impl<'a> Iterator for MessengerPlusParser<'a>  {
                 Ok(XmlEvent::StartElement {
                        name, attributes, ..
                    }) => {
-                    self.parse_node(&name.local_name, &attributes, &mut message);
+                    let res = self.parse_node(&name.local_name, &attributes, &mut message);
+                    if let Err(e) = res { return Some(Err(e)); }
                     self.parents.0 = format!("{}.{}", self.parents.0, name.local_name);
                     self.parents.1 = attributes;
                 }
                 Ok(XmlEvent::Characters(data)) => {
-                    self.parse_text(&data, &mut message);
+                    let res = self.parse_text(&data, &mut message);
+                    if let Err(e) = res { return Some(Err(e)); }
                 }
                 Ok(XmlEvent::EndElement { name }) => {
                     let new_selector = match self.parents.0.rfind('.') {
@@ -205,14 +209,14 @@ impl<'a> Iterator for MessengerPlusParser<'a>  {
                     };
                     self.parents.0 = new_selector.to_string();
                     if name.local_name.eq("tr") && self.parents.0.ends_with("html.body.div.table.tbody") {
-                        return Some(message);
+                        return Some(Ok(message));
                     }
                 }
                 Ok(XmlEvent::EndDocument) => {
                     self.details.last_session_id = self.session.id.clone();
                     return None;
                 }
-                Err(e) => panic!("Something went wrong: {}", e),
+                Err(e) => { return Some(Err(Box::new(e))) },
                 _ => {}
             }
         }
@@ -220,7 +224,13 @@ impl<'a> Iterator for MessengerPlusParser<'a>  {
 }
 
 impl<'a> MessengerArchive for MessengerPlusParser<'a> {
-    fn details(&self) -> &ArchiveDetails { &self.details }
+    fn details(&self) -> Option<&ArchiveDetails> {
+        if self.details.last_session_id.is_empty() {
+            None
+        } else {
+            Some(&self.details)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -232,7 +242,7 @@ mod tests {
     #[test]
     fn parse_sample_file() {
         let path = "test/alice@example.com.html";
-        let mut parser = MessengerPlusParser::new(path);
+        let mut parser = MessengerPlusParser::new(path).unwrap();
 
         let mut f = File::open("test/Images/MsgPlus_Img0663.png").unwrap();
         let mut buffer = Vec::new();
@@ -338,13 +348,13 @@ mod tests {
                 data: vec![Data::System("Alice is now offline".to_string())],
             },
         ];
-        assert_eq!(parser.next().as_ref(), Some(&messages[0]));
-        assert_eq!(parser.next().as_ref(), Some(&messages[1]));
-        assert_eq!(parser.next().as_ref(), Some(&messages[2]));
-        assert_eq!(parser.next().as_ref(), Some(&messages[3]));
-        assert_eq!(parser.next().as_ref(), Some(&messages[4]));
-        assert_eq!(parser.next().as_ref(), Some(&messages[5]));
-        assert_eq!(parser.next(), None);
-        assert_eq!(parser.details(), &details);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[0]);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[1]);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[2]);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[3]);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[4]);
+        assert_eq!(parser.next().unwrap().unwrap(), messages[5]);
+        assert!(parser.next().is_none());
+        assert_eq!(parser.details(), Some(&details));
     }
 }

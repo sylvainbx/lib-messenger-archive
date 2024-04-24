@@ -1,10 +1,9 @@
 pub mod common;
-pub mod error;
 pub mod messenger_plus_parser;
 pub mod xml_parser;
 
 pub trait MessengerArchive: Iterator {
-    fn details(&self) -> &ArchiveDetails;
+    fn details(&self) -> Option<&ArchiveDetails>;
 }
 
 #[derive(Default, PartialEq, Debug)]
