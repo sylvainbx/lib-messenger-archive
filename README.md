@@ -31,5 +31,4 @@ This simple example above only prints the textual content, unformatted:
     }
     let details = parser.details().unwrap();
     println!("---\nThose messages were exchanged with: {}", details.recipient_id);
-    }
 ```
