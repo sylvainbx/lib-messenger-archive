@@ -2,6 +2,8 @@
 name = "lib-messenger-archive"
 version = "0.1.0"
 edition = "2021"
+description = "A library to read the MSN / Windows Live Messenger conversation archives."
+repository = "https://github.com/sylvainbx/lib-messenger-archive/"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
